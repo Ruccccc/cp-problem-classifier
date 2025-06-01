@@ -38,7 +38,7 @@ class LSTM(nn.Module):
             elif 'bias' in name:
                 nn.init.constant_(param, 0.0)
         
-        self.fc = nn.Linear(hidden_size, output_size)
+        self.fc = nn.Linear(hidden_size * 2, output_size)
 
     def forward(self, x):
         embedded = self.embedding(x)
