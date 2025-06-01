@@ -1,19 +1,27 @@
 import ast
 import matplotlib.pyplot as plt
+import nltk
+from nltk.tokenize import word_tokenize
 import torch
 from torch.nn.utils.rnn import pad_sequence
 from torch.utils.data import Dataset
-from typing import List, Tuple
+from typing import Dict, List, Tuple
 import pandas as pd
 
-def load_dataset(file='dataset/problems.csv') -> Tuple[List[str], List[List[str]]]:
+def load_dataset(file='dataset/problems.csv') -> Tuple[List[int], List[int], Dict[str, int], Dict[str, int]]:
     """
     load dataset and tokenize input and label
     """
     df = pd.read_csv(file)
 
+    # Download nltk requirement
+    try:
+        nltk.data.find("tokenizers/punkt_tab")
+    except LookupError:
+        nltk.download("punkt_tab")
+
     # Tokenize labels
-    # (TODO) The number of labels is fixed, we can write a table to match label and its token)
+    # (TODO) The number of labels is fixed, we can write a table mapping label to token
     labels = [ast.literal_eval(l) for l in df['labels']]
     all_labels = set(b for a in labels for b in a)
     label_dict = {j: i for i, j in enumerate(all_labels)}
@@ -25,13 +33,13 @@ def load_dataset(file='dataset/problems.csv') -> Tuple[List[str], List[List[str]
             lv[label_dict[l]] = 1
         label_vecs.append(lv)
 
-    # Tokenize descriptions
+    # Tokenize description and build dictionary.
     descriptions = []
     voc_dict = {'<pad>': 0, "<unk>": 1}
     voc_count = 2
     for description in df['description']:
         desc = []
-        for word in description.split():
+        for word in word_tokenize(description):
             if not word in voc_dict:
                 voc_dict[word] = voc_count
                 voc_count += 1

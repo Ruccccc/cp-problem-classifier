@@ -12,7 +12,7 @@ from utils import load_dataset, TrainDataset, collate_fn, plotloss
 TRAIN_LENGTH = 0.8
 BATCH_SIZE = 32
 EPOCH = 50
-LEARNING_RATE = 5e-3
+LEARNING_RATE = 0.005
 
 """
 Load Dataset
@@ -20,7 +20,7 @@ Load Dataset
 
 logger.info("Load Dataset")
 
-desc, labels, voc_dict, label_dict = load_dataset()
+desc, labels, voc_dict, label_dict = load_dataset('dataset/problems1.csv')
 desc, labels = shuffle(desc, labels, random_state=777)
 
 train_len = int(len(desc) * TRAIN_LENGTH)
@@ -43,8 +43,8 @@ device = torch.device(
 logger.info(f"RNN - Train with {device}")
 
 # model
-# model = RNN(len(voc_dict), 100, 256, len(label_dict)).to(device)
-model = LSTM(len(voc_dict), 100, 256, len(label_dict)).to(device)
+model = RNN(len(voc_dict), 100, 256, len(label_dict), 1).to(device)
+# model = LSTM(len(voc_dict), 100, 256, len(label_dict), 1).to(device)
 
 # loss function and optimizer
 pos_weight = [0] * len(label_dict)
@@ -54,29 +54,36 @@ for i in labels:
 pos_weight = torch.tensor(pos_weight)
 pos_weight = (len(desc) - pos_weight) / pos_weight
 pos_weight = pos_weight.clamp(max=20.0).to(device)
-# pos_weight = ((len(desc) - pos_weight) / pos_weight + 1e-5)
-# pos_weight = pos_weight.log1p().clamp(max=3.0).to(device)
 
 criterion = nn.BCEWithLogitsLoss(pos_weight=pos_weight)
 optimizer = optim.Adam(model.parameters(), lr=LEARNING_RATE)
 
 train_losses = []
 val_losses = []
-max_acc = 0
 max_F1 = 0
-for epoch in range(EPOCH):
+best_thres = 0
+try:
+    for epoch in range(EPOCH):
 
-    train_loss = train(model, train_loader, criterion, optimizer, device)
+        train_loss = train(model, train_loader, criterion, optimizer, device)
 
-    val_loss, acc, f1_mirco = validate(model, val_loader, criterion, device, 0.7)
+        curr_max_f1 = 0
+        curr_best_thres = 0
+        for t in [i/100 for i in range(20, 80, 5)]:
+            val_loss, acc, f1_micro = validate(model, val_loader, criterion, device, t)
+            if f1_micro > curr_max_f1:
+                curr_max_f1 = f1_micro
+                curr_best_thres = t
 
-    train_losses.append(train_loss)
-    val_losses.append(val_loss)
-    max_acc = max(max_acc, acc)
-    max_F1 = max(max_F1, f1_mirco)
+        train_losses.append(train_loss)
+        val_losses.append(val_loss)
+        if max_F1 < curr_max_f1:
+            max_F1 = curr_max_f1
+            best_thres = curr_best_thres
 
-    logger.info(f"Epoch {epoch:>2} | Train loss: {train_loss:.6f} | Val loss: {val_loss:.6f} | Acc: {acc:.6f} | F1 score: {f1_mirco:.6f}")
+        logger.info(f"Epoch {epoch:>2} | Train loss: {train_loss:.6f} | Val loss: {val_loss:.6f} | F1 score: {curr_max_f1:.6f} | Best Thres: {curr_best_thres}")
+except KeyboardInterrupt:
+    pass
 
-
-logger.info(f"Maximum Accuracy: {max_acc}")
 logger.info(f"Maximum F1 micro: {max_F1}")
+logger.info(f"Best Threshold: {best_thres}")
