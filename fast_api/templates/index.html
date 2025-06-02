@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Text Classifier</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 2rem; max-width: 800px; margin: auto; }
+        textarea { width: 100%; height: 120px; }
+        .result { margin-top: 2rem; background: #f2f2f2; padding: 1rem; border-radius: 5px; }
+    </style>
+</head>
+<body>
+    <h1>Text Classifier</h1>
+    <form method="post">
+        <textarea name="text" placeholder="Enter your text here...">{{ result.text if result else "" }}</textarea><br>
+        <button type="submit">Predict</button>
+    </form>
+
+    {% if result %}
+    <div class="result">
+        <h2>Prediction</h2>
+        <p><strong>Labels:</strong> {{ result.predicted }}</p>
+        <h3>Scores:</h3>
+        <ul>
+        {% for score in result.probs %}
+            <li>{{ loop.index0 }}: {{ '{:.3f}'.format(score) }}</li>
+        {% endfor %}
+        </ul>
+    </div>
+    {% endif %}
+</body>
+</html>
