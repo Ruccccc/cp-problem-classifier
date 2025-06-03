@@ -1,5 +1,6 @@
 from sklearn.utils import shuffle
 from sklearn.metrics import f1_score, accuracy_score
+import numpy as np
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -34,17 +35,19 @@ val_loader = DataLoader(val_dataset, batch_size=BATCH_SIZE, shuffle=False, colla
 RNN - train
 """
 
+EPOCH = 40
+LEARNING_RATE = 0.005
+
 device = torch.device(
     "cuda" if torch.cuda.is_available() else
     "mps" if torch.backends.mps.is_available() else
     "cpu"
 )
 
-logger.info(f"RNN - Train with {device}")
-
 # model
-model = RNN(len(voc_dict), 100, 256, len(label_dict), 1).to(device)
-# model = LSTM(len(voc_dict), 100, 256, len(label_dict), 1).to(device)
+model = RNN(len(voc_dict), 100, 128, len(label_dict), 2, "GRU").to(device)
+
+logger.info(f"{model.modelname} - Train with {device}")
 
 # loss function and optimizer
 pos_weight = [0] * len(label_dict)
@@ -56,7 +59,13 @@ pos_weight = (len(desc) - pos_weight) / pos_weight
 pos_weight = pos_weight.clamp(max=20.0).to(device)
 
 criterion = nn.BCEWithLogitsLoss(pos_weight=pos_weight)
-optimizer = optim.Adam(model.parameters(), lr=LEARNING_RATE)
+optimizer = optim.Adam(model.parameters(), lr=LEARNING_RATE, weight_decay=1e-4)
+scheduler = optim.lr_scheduler.ReduceLROnPlateau(
+    optimizer,
+    mode='min',     # observe loss
+    factor=0.5,
+    patience=3,
+)
 
 train_losses = []
 val_losses = []
@@ -67,23 +76,21 @@ try:
 
         train_loss = train(model, train_loader, criterion, optimizer, device)
 
-        curr_max_f1 = 0
-        curr_best_thres = 0
-        for t in [i/100 for i in range(20, 80, 5)]:
-            val_loss, acc, f1_micro = validate(model, val_loader, criterion, device, t)
-            if f1_micro > curr_max_f1:
-                curr_max_f1 = f1_micro
-                curr_best_thres = t
+        val_loss, f1, curr_thres = validate(model, val_loader, criterion, device)
 
         train_losses.append(train_loss)
         val_losses.append(val_loss)
-        if max_F1 < curr_max_f1:
-            max_F1 = curr_max_f1
-            best_thres = curr_best_thres
+        if max_F1 < f1:
+            max_F1 = f1
+            best_thres = curr_thres
 
-        logger.info(f"Epoch {epoch:>2} | Train loss: {train_loss:.6f} | Val loss: {val_loss:.6f} | F1 score: {curr_max_f1:.6f} | Best Thres: {curr_best_thres}")
+        logger.info(f"Epoch {epoch:>2} | Train loss: {train_loss:.6f} | Val loss: {val_loss:.6f} | F1 score: {f1:.6f} | Threshold: {curr_thres}")
+
+        scheduler.step(val_loss)
+        
 except KeyboardInterrupt:
     pass
 
+validate(model, val_loader, criterion, device, True)
 logger.info(f"Maximum F1 micro: {max_F1}")
 logger.info(f"Best Threshold: {best_thres}")
